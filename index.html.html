@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>سجل متابعة الخطابات</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  :root{
+    --bg:#F3F1E6;
+    --surface:#FDFCF8;
+    --border:#E3DEC9;
+    --ink:#22301C;
+    --ink-soft:#5B6650;
+    --green:#3D5A4A;
+    --green-deep:#2E4739;
+    --teal:#769081;
+    --gold:#C9A961;
+    --gold-deep:#B89968;
+    --sage-light:#C2D1C9;
+    --sage-pale:#AEC6BA;
+    --rust:#B24B3C;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'IBM Plex Sans Arabic', sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,.num{font-family:'Cairo', sans-serif;}
+
+  /* top progress bar — signature element */
+  #loadbar{
+    position:fixed; top:0; right:0; height:3px; width:0%;
+    background:linear-gradient(90deg, var(--gold-deep), var(--green));
+    transition:width .6s ease;
+    z-index:100;
+  }
+
+  header{
+    padding:28px 32px 20px;
+    display:flex; align-items:flex-start; justify-content:space-between;
+    flex-wrap:wrap; gap:16px;
+    border-bottom:1px solid var(--border);
+    background:var(--surface);
+  }
+  .title-block h1{
+    margin:0; font-size:26px; font-weight:800; color:var(--green-deep);
+    letter-spacing:.2px;
+  }
+  .title-block p{
+    margin:6px 0 0; color:var(--ink-soft); font-size:14px;
+  }
+  .status-block{
+    display:flex; align-items:center; gap:14px;
+  }
+  .live-pill{
+    display:flex; align-items:center; gap:8px;
+    background:#EFF4EA; border:1px solid #D8E4CE;
+    padding:7px 14px; border-radius:999px; font-size:13px; color:var(--green-deep);
+  }
+  .live-dot{
+    width:8px; height:8px; border-radius:50%; background:var(--green);
+    animation:pulse 1.8s infinite;
+  }
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 rgba(61,90,74,.5);}
+    70%{box-shadow:0 0 0 7px rgba(61,90,74,0);}
+    100%{box-shadow:0 0 0 0 rgba(61,90,74,0);}
+  }
+  #refreshBtn{
+    background:var(--green); color:#fff; border:none; padding:9px 18px;
+    border-radius:999px; font-family:inherit; font-size:13px; font-weight:600;
+    cursor:pointer; display:flex; align-items:center; gap:6px;
+  }
+  #refreshBtn:hover{background:var(--green-deep);}
+  #refreshBtn:disabled{opacity:.6; cursor:default;}
+  #refreshBtn svg{width:14px; height:14px;}
+  .spin{animation:spin 1s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  main{padding:26px 32px 60px; max-width:1400px; margin:0 auto;}
+
+  #errorBox{
+    display:none; background:#FBEAE6; border:1px solid #E9B7AC; color:#7A2E20;
+    padding:14px 18px; border-radius:var(--radius); margin-bottom:20px; font-size:14px;
+  }
+
+  .kpi-grid{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px;
+  }
+  .kpi-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:18px 20px; position:relative; overflow:hidden;
+  }
+  .kpi-card::before{
+    content:''; position:absolute; top:0; right:0; width:4px; height:100%;
+    background:var(--accent, var(--green));
+  }
+  .kpi-label{font-size:13px; color:var(--ink-soft); margin-bottom:8px;}
+  .kpi-value{font-size:30px; font-weight:800; color:var(--ink);}
+  .kpi-sub{font-size:12px; color:var(--ink-soft); margin-top:4px;}
+
+  .charts-row{
+    display:grid; grid-template-columns:1.1fr 1fr; gap:16px; margin-bottom:16px;
+  }
+  .chart-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:18px 20px;
+  }
+  .chart-card h2{font-size:15px; margin:0 0 14px; font-weight:700; color:var(--green-deep);}
+  .chart-wrap{position:relative; height:260px;}
+  .chart-card.wide .chart-wrap{height:220px;}
+
+  .table-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:20px; margin-top:16px;
+  }
+  .table-toolbar{
+    display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:16px;
+  }
+  .table-toolbar input, .table-toolbar select{
+    font-family:inherit; font-size:13px; padding:9px 12px; border-radius:9px;
+    border:1px solid var(--border); background:#FBFAF5; color:var(--ink);
+  }
+  .table-toolbar input{flex:1; min-width:200px;}
+  .result-count{font-size:12px; color:var(--ink-soft); margin-inline-start:auto;}
+
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  thead th{
+    text-align:right; padding:10px 10px; color:var(--ink-soft); font-weight:600;
+    border-bottom:2px solid var(--border); white-space:nowrap; font-size:12px;
+  }
+  tbody td{
+    padding:10px 10px; border-bottom:1px solid var(--border); vertical-align:top;
+  }
+  tbody tr:hover{background:#FAF8EF;}
+  .badge{
+    display:inline-block; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:600;
+  }
+  .badge.yes{background:#FBEAE6; color:var(--rust);}
+  .badge.no{background:#EFF4EA; color:var(--green-deep);}
+  .badge.tag{background:#EEF2ED; color:var(--teal); font-weight:500;}
+
+  .pagination{
+    display:flex; justify-content:center; align-items:center; gap:10px; margin-top:18px;
+  }
+  .pagination button{
+    background:none; border:1px solid var(--border); border-radius:8px; padding:6px 12px;
+    font-family:inherit; cursor:pointer; font-size:13px; color:var(--ink);
+  }
+  .pagination button:disabled{opacity:.4; cursor:default;}
+  .pagination span{font-size:13px; color:var(--ink-soft);}
+
+  footer{
+    text-align:center; padding:20px; font-size:12px; color:var(--ink-soft);
+  }
+
+  @media (max-width:900px){
+    .kpi-grid{grid-template-columns:repeat(2,1fr);}
+    .charts-row{grid-template-columns:1fr;}
+    header{padding:20px;}
+    main{padding:18px;}
+    .content-wrap{margin-right:0;}
+    .sidebar{position:static; width:100%; height:auto; flex-direction:column;}
+    .sidebar-tagline, .sidebar-footer{display:none;}
+  }
+
+  html{scroll-behavior:smooth;}
+
+  /* ---- Sidebar (Reef theme) ---- */
+  .sidebar{
+    position:fixed; top:0; right:0; bottom:0; width:264px;
+    background:
+      radial-gradient(circle at 15% 12%, rgba(233,184,37,.06) 0, transparent 45%),
+      repeating-linear-gradient(45deg, rgba(233,184,37,.035) 0 2px, transparent 2px 26px),
+      repeating-linear-gradient(-45deg, rgba(255,255,255,.03) 0 2px, transparent 2px 26px),
+      linear-gradient(165deg, #1E3128 0%, #2E4739 55%, #3D5A4A 100%);
+    color:#E7E9E2;
+    display:flex; flex-direction:column;
+    padding:26px 20px;
+    overflow-y:auto;
+    z-index:60;
+  }
+  .content-wrap{margin-right:264px;}
+
+  .sidebar-logo{display:flex; align-items:center; gap:10px;}
+  .reef-mark{width:32px; height:32px; flex-shrink:0;}
+  .sidebar-logo-text{display:flex; flex-direction:column; line-height:1.25;}
+  .logo-ar{font-family:'Cairo',sans-serif; font-weight:800; font-size:19px; color:#fff;}
+  .logo-en{font-size:9px; letter-spacing:2.5px; color:var(--gold); margin-top:1px;}
+
+  .sidebar-tagline{
+    font-size:11.5px; color:#AFC0B2; margin:14px 2px 22px; padding-bottom:18px;
+    border-bottom:1px solid rgba(255,255,255,.12);
+  }
+
+  .sidebar-nav{display:flex; flex-direction:column;}
+  .nav-section-title{font-size:11px; color:#8FA394; margin:16px 6px 8px; font-weight:700; letter-spacing:.3px;}
+  .nav-section-title:first-child{margin-top:0;}
+  .nav-item{
+    display:flex; align-items:center; gap:11px; padding:10px 13px; border-radius:10px;
+    color:#D6DBD1; text-decoration:none; font-size:13.5px; font-weight:500; margin-bottom:3px;
+    transition:background .15s, color .15s; cursor:pointer; border:none; background:none; width:100%; text-align:right;
+    font-family:inherit;
+  }
+  .nav-item svg{width:17px; height:17px; flex-shrink:0; opacity:.9;}
+  .nav-item:hover{background:rgba(255,255,255,.08);}
+  .nav-item.active{background:var(--gold); color:#2E4739; font-weight:700;}
+  .nav-item.active svg{opacity:1;}
+
+  .sidebar-footer{
+    margin-top:auto; padding-top:16px; border-top:1px solid rgba(255,255,255,.12);
+    font-size:11.5px; color:#9FB0A2;
+  }
+  .sidebar-footer-date{color:#fff; font-weight:700; margin-top:4px; font-family:'Cairo',sans-serif; font-size:13px;}
+</style>
+</head>
+<body>
+<div id="loadbar"></div>
+
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <svg class="reef-mark" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+      <path d="M20 36c0-11 2.5-17.5 9-21.5-2 8.5-2.5 15-9 21.5z" fill="#11703B"/>
+      <path d="M20 36c0-8.5-3-13.5-9.5-16.5 1 7.5 3.2 12.5 9.5 16.5z" fill="#E9B825"/>
+    </svg>
+    <div class="sidebar-logo-text">
+      <span class="logo-ar">ريف</span>
+      <span class="logo-en">REEF SAUDI</span>
+    </div>
+  </div>
+  <div class="sidebar-tagline">لوحة متابعة الخطابات</div>
+
+  <nav class="sidebar-nav">
+    <div class="nav-section-title">لوحات عامة</div>
+    <a class="nav-item active" href="#kpiSection">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
+      <span>نظرة عامة</span>
+    </a>
+    <a class="nav-item" href="#tableSection">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      <span>سجل الخطابات</span>
+    </a>
+    <a class="nav-item" href="#tableSection" onclick="document.getElementById('followFilter').value='نعم'; applyFilters();">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+      <span>تتطلب متابعة</span>
+    </a>
+
+    <div class="nav-section-title">تفصيل</div>
+    <a class="nav-item" href="#typeSection">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+      <span>حسب النوع</span>
+    </a>
+    <a class="nav-item" href="#sectorSection">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12,2 22,8.5 12,15 2,8.5"/><polyline points="2,15.5 12,22 22,15.5"/><polyline points="2,12 12,18.5 22,12"/></svg>
+      <span>حسب القطاع</span>
+    </a>
+    <a class="nav-item" href="#entitySection">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"/><line x1="8" y1="7" x2="8" y2="7.01"/><line x1="12" y1="7" x2="12" y2="7.01"/><line x1="16" y1="7" x2="16" y2="7.01"/><line x1="8" y1="11" x2="8" y2="11.01"/><line x1="12" y1="11" x2="12" y2="11.01"/><line x1="16" y1="11" x2="16" y2="11.01"/><line x1="8" y1="15" x2="8" y2="15.01"/><line x1="12" y1="15" x2="12" y2="15.01"/><line x1="16" y1="15" x2="16" y2="15.01"/></svg>
+      <span>حسب الجهة</span>
+    </a>
+    <a class="nav-item" href="#timeSection">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,17 9,10 13,14 21,5"/><polyline points="21,5 21,10"/><polyline points="21,5 16,5"/></svg>
+      <span>عبر الزمن</span>
+    </a>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div>آخر تحديث</div>
+    <div class="sidebar-footer-date" id="sidebarDate">—</div>
+  </div>
+</aside>
+
+<div class="content-wrap">
+<header>
+  <div class="title-block">
+    <h1>سجل متابعة الخطابات</h1>
+    <p>لوحة تتحدث تلقائيًا من ملف البيانات على جوجل شيت</p>
+  </div>
+  <div class="status-block">
+    <div class="live-pill"><span class="live-dot"></span><span id="lastUpdated">جارِ التحميل…</span></div>
+    <button id="refreshBtn" onclick="loadData(true)">
+      <svg id="refreshIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+      تحديث الآن
+    </button>
+  </div>
+</header>
+
+<main>
+  <div id="errorBox"></div>
+
+  <div class="kpi-grid" id="kpiSection">
+    <div class="kpi-card" style="--accent:var(--green)">
+      <div class="kpi-label">إجمالي الخطابات</div>
+      <div class="kpi-value num" id="kpiTotal">—</div>
+      <div class="kpi-sub" id="kpiTotalSub"></div>
+    </div>
+    <div class="kpi-card" style="--accent:var(--rust)">
+      <div class="kpi-label">تتطلب متابعة</div>
+      <div class="kpi-value num" id="kpiFollow">—</div>
+      <div class="kpi-sub" id="kpiFollowSub"></div>
+    </div>
+    <div class="kpi-card" style="--accent:var(--teal)">
+      <div class="kpi-label">عدد المشاريع</div>
+      <div class="kpi-value num" id="kpiProjects">—</div>
+      <div class="kpi-sub">مشروعًا مختلفًا في السجل</div>
+    </div>
+    <div class="kpi-card" style="--accent:var(--gold)">
+      <div class="kpi-label">هذا الشهر</div>
+      <div class="kpi-value num" id="kpiMonth">—</div>
+      <div class="kpi-sub" id="kpiMonthSub"></div>
+    </div>
+  </div>
+
+  <div class="charts-row">
+    <div class="chart-card" id="typeSection">
+      <h2>توزيع الخطابات حسب النوع</h2>
+      <div class="chart-wrap"><canvas id="typeChart"></canvas></div>
+    </div>
+    <div class="chart-card" id="entitySection">
+      <h2>توزيع الخطابات حسب تصنيف الجهة</h2>
+      <div class="chart-wrap"><canvas id="entityChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="chart-card wide" id="sectorSection">
+    <h2>توزيع الخطابات حسب القطاع</h2>
+    <div class="chart-wrap"><canvas id="sectorChart"></canvas></div>
+  </div>
+
+  <div class="chart-card wide" id="timeSection">
+    <h2>عدد الخطابات عبر الزمن</h2>
+    <div class="chart-wrap"><canvas id="timeChart"></canvas></div>
+  </div>
+
+  <div class="table-card" id="tableSection">
+    <div class="table-toolbar">
+      <input id="searchInput" type="text" placeholder="ابحث بالمشروع، الموضوع، الجهة…" oninput="applyFilters()">
+      <select id="typeFilter" onchange="applyFilters()"><option value="">كل الأنواع</option></select>
+      <select id="sectorFilter" onchange="applyFilters()"><option value="">كل القطاعات</option></select>
+      <select id="followFilter" onchange="applyFilters()">
+        <option value="">كل الحالات</option>
+        <option value="نعم">تتطلب متابعة</option>
+        <option value="لا">لا تتطلب متابعة</option>
+      </select>
+      <span class="result-count" id="resultCount"></span>
+    </div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>المشروع</th>
+            <th>القطاع</th>
+            <th>نوع الخطاب</th>
+            <th>الموضوع</th>
+            <th>الجهة</th>
+            <th>تاريخ الخطاب</th>
+            <th>يتطلب متابعة</th>
+            <th>المسؤول</th>
+            <th>رقم الخطاب</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <button id="prevBtn" onclick="changePage(-1)">السابق</button>
+      <span id="pageInfo"></span>
+      <button id="nextBtn" onclick="changePage(1)">التالي</button>
+    </div>
+  </div>
+</main>
+
+<footer>يتم تحديث البيانات تلقائيًا من ملف Google Sheets المنشور — آخر محاولة تحديث تظهر أعلى الصفحة</footer>
+</div><!-- /content-wrap -->
+
+<script>
+const SHEET_ID = "1_6QbqyDtk9fCnBrPrDA7BCgVC2elt55Vwc_CqThShio";
+const GID = "1160182867";
+const REFRESH_MS = 5 * 60 * 1000; // auto refresh every 5 minutes
+
+let rawRows = [];
+let filteredRows = [];
+let page = 1;
+const PAGE_SIZE = 20;
+let typeChart, entityChart, timeChart, sectorChart;
+
+const COLORS = ['#3D5A4A','#C9A961','#769081','#B24B3C','#C2D1C9','#B89968','#2E4739','#AEC6BA'];
+
+/* project -> sector mapping (uploaded list) */
+const PROJECT_SECTOR_LIST = [["إنشاء مدن للورود والنباتات العطرية بمنطقة جازان (أحد المسارحة )", "الورد"], ["إنشاء مشاتل للورود والنباتات العطرية بمنطقة جازان (أحد المسارحة )", "الورد"], ["إنشاء مصنع  استخلاص  للورود والنباتات ومشاتل – أبو عريش (المنتزه الوطني)", "الورد"], ["إنشاء مدن للورود والنباتات العطرية بمنطقة جازان – أبو عريش (المنتزه الوطني) م1", "الورد"], ["توريد (4) عيادات متنقلة لتشخيص أمراض وآفات الورد والنباتات الطبية والعطرية", "الورد"], ["تقديم الدعم الأستشاري لتنفيذ المدارس الحقلية بتطبيق الذكاء الأصطناعي", "الورد"], ["تطوير قاعدة بيانات لمزارعي الورد والبن والفاكهة والعسل لتناوب الأيدي العاملة", "الورد"], ["توريد أجهزة للوحدة الفنية الإرشادية للمونتاج والتصوير لفروع الوزارة بالمناطق.", "الورد"], ["إنشاء وتجهيز معمل لزراعة الانسجة لإنتاج ورد عالي الجودة الرياض", "الورد"], ["توريد أجهزة وأدوات ومواد لمختبرات تحليل المياه والتربة لعدد (6) من مناطق المملكة", "الورد"], ["إنشاء مركز الورد بالطائف", "الورد"], ["أعمال إنشائية في معمل زراعة الأنسجة لإنتاج ورد عالي الجودة بالرياض", "الورد"], ["تقديم الخدمات لاستكمال مشاريع قطاع الورد", "الورد"], ["تقديم الخدمات لاستكمال معمل زراعة الأنسجة بالرياض", "الورد"], ["إنشاء وتجهيز مجمع المزارع النموذجية للإنتاج الحيواني بالجبيل", "المواشي"], ["إنشاء وتجهيز مجمع المزارع النموذجية للإنتاج الحيواني بالمدينة المنورة", "المواشي"], ["إنشاء وتجهيز مجمع المزارع النموذجية للإنتاج الحيواني بحفر الباطن", "المواشي"], ["إنشاء وتجهيز مجمع المزارع النموذجية للإنتاج الحيواني بنجران", "المواشي"], ["إنشاء وتجهيز مجمع المزارع النموذجية للإنتاج الحيواني بحائل", "المواشي"], ["إنشاء وتجهيز مجمع المزارع النموذجية للإنتاج الحيواني بالقصيم", "المواشي"], ["إنشاء وتجهيز مجمع المزارع النموذجية للإنتاج الحيواني في عرعر", "المواشي"], ["ترقيم وتسجيل الثروة الحيوانية", "المواشي"], ["تقديم الخدمات لاستكمال مشاريع قطاع الماشية", "المواشي"], ["توريد معدات زراعية متنوعة في مكة وجازان", "المحاصيل البعلية"], ["توريد معدات الحصاد لخدمة الزراعات البعلية في مكة المكرمة وجازان", "المحاصيل البعلية"], ["تحسين أصناف المحاصيل الحقلية المحلية لدى المزارعين جنوب غرب المملكة", "المحاصيل البعلية"], ["تشغيل وحدة ابحاث الزراعة البعلية بمركز البحوث الزراعية بمنطقة جازان", "المحاصيل البعلية"], ["انشاء مزارع نموذجية لمحاصيل البعلية بمنطقة مكة والباحة والمدينة", "المحاصيل البعلية"], ["انشاء مزارع نموذجية لمحاصيل الحبوب البعلية بمنطقة عسير وجازان", "المحاصيل البعلية"], ["توريد معدات الحصاد الحديثة لخدمة المحاصيل البعلية", "المحاصيل البعلية"], ["توريد معدات إعداد التربة والزراعة الحديثة لخدمة مزارعي المحاصيل البعلية", "المحاصيل البعلية"], ["توريد معدات اعداد التربة لخدمة مزارعي المحاصيل البعلية", "المحاصيل البعلية"], ["توريد ملحقات معدات إعداد التربة والزراعة الحديثة لخدمة مزارعي المحاصيل البعلية", "المحاصيل البعلية"], ["تطبيق نظم الري المستدامة والتقنيات الزراعية لصغار مزارعي المحاصيل الحقلية المطرية بمنطقة المدينة المنورة", "المحاصيل البعلية"], ["تطبيق نظم الري المستدامة والتقنيات الزراعية لصغار مزارعي المحاصيل الحقلية تبوك", "المحاصيل البعلية"], ["توريد معدات إعداد التربة بمنطقة مكة المكرمة", "المحاصيل البعلية"], ["تنفيذ القوافل الإرشادية في مجال(الثروة النباتية) في مناطق المملكة", "القيمة المضافة"], ["تطوير تطبيق مرشدك الزراعي بتطبيق الذكاء الاصطناعي للأمراض و الآفات", "القيمة المضافة"], ["الإشراف على المشاريع الإنشائية لبرنامج التنمية في الجنوب الغربي من المملكة", "القيمة المضافة"], ["الإشراف على المشاريع الإنشائية لبرنامج التنمية في المنطقة الوسطى والغربية", "القيمة المضافة"], ["تقديم الخدمات الإستشارية لمشاريع برنامج التنمية الريفية الزراعية المستدامة", "القيمة المضافة"], ["الاشراف على مشاريع تطبيق نظم الري المستدامة والمزارع النموذجية", "القيمة المضافة"], ["انشاء مزارع نموذجية بمنطقة الباحة", "القيمة المضافة"], ["انشاء مزارع نموذجية بمنطقة جازان", "القيمة المضافة"], ["انشاء مزارع نموذجية بمنطقة عسير", "القيمة المضافة"], ["انشاء مزارع نموذجية بمنطقة مكة المكرمة", "القيمة المضافة"], ["إنشاء قرية ريف في جازان", "القيمة المضافة"], ["تقديم الخدمات الأستشارية لتقييم وتطوير منصة وبرامج تدريبية لبرنامج التنمية الريفية الزراعية المستدامة", "القيمة المضافة"], ["ملحقات وإستكمالات إنشائية لمشاريع برنامج التنمية الريفية", "القيمة المضافة"], ["إنشاء قرية ريف بالمنطقة الشرقية - القطيف", "القيمة المضافة"], ["أعمال البنية التحتية والرصف لمشاريع برنامج التنمية الريفية", "القيمة المضافة"], ["انشاء مزارع نموذجية في جميع مناطق المملكة", "القيمة المضافة"], ["تقديم الخدمات لإصدار التصاريح والدراسات الهيدرولوجية و البيئية لمشاريع برنامج ريف", "القيمة المضافة"], ["إنشاء وتجهيز مركز الخدمات التسويقية للمنتجات الزراعية بالمنطقة الشرقية", "الفاكهة"], ["إنشاء وتجهيز مركز الخدمات التسويقية للمنتجات الزراعية بمنطقة جازان", "الفاكهة"], ["إنشاء وتجهيز مركز الخدمات التسويقية للمنتجات الزراعية بمنطقة حائل", "الفاكهة"], ["إنشاء وتجهيز مركز الخدمات التسويقية للمنتجات الزراعية بمنطقة القصيم", "الفاكهة"], ["إنشاء وتجهيز مركز الخدمات التسويقية للمنتجات الزراعية بمنطقة عسير", "الفاكهة"], ["إنشاء وتجهيز مركز الخدمات التسويقية للمنتجات الزراعية بمنطقة الباحة", "الفاكهة"], ["إنشاء وتجهيز مركز الخدمات التسويقية للمنتجات الزراعية بمنطقة مكة المكرمة", "الفاكهة"], ["إنشاء وتجهيز مركز الخدمات التسويقية للمنتجات الزراعية بمنطقة تبوك", "الفاكهة"], ["إنشاء وتجهيز مركز الخدمات التسويقية للمنتجات الزراعية بمنطقة الجوف", "الفاكهة"], ["إنشاء وتجهيز مركز الخدمات التسويقية للمنتجات الزراعية بمنطقة نجران", "الفاكهة"], ["إنشاء وتجهيز مركز الخدمات التسويقية للمنتجات الزراعية بمنطقة المدينة المنورة", "الفاكهة"], ["بناء القدرات لمكون تطوير إنتاج وتصنيع وتسويق الفواكه", "الفاكهة"], ["تشغيل وصيانة مشروع الوحدة البحثية للزراعة بالمياه المجددة بوادي بن هشبل", "الفاكهة"], ["توريد معدات ومواد زراعية لمشروع الوحدة البحثية بوادي بن هشبل", "الفاكهة"], ["توريد وتركيب مواد لمشاتل مركز أبحاث البستنة بنجران", "الفاكهة"], ["توريد وتركيب تجهيزات مختبرية لوحدة أبحاث مكافحة الأمراض النباتية والتربة بجازان", "الفاكهة"], ["توريد وتركيب أجهزة ومواد للمختبر المركزي للثروة النباتية بمنطقة الرياض", "الفاكهة"], ["توريد وتركيب بنشات لمركز مكافحة الأمراض النباتية والملوثات الكيميائية بالرياض", "الفاكهة"], ["تطبيق نظم الري المستدامة والتقنيات الزراعية لصغار مزارعي محاصيل الفاكهة بمنطقة نجران", "الفاكهة"], ["تقديم الخدمات لاستكمال مشاريع قطاع الفاكهة", "الفاكهة"], ["إنشاء محطات تربية ملكات النحل وإنتاج الطرود بمنطقة عسير-النماص", "العسل"], ["إنشاء محطات تربية ملكات النحل وإنتاج الطرود بمنطقة جازان", "العسل"], ["إنشاء محطات تربية ملكات النحل وإنتاج الطرود بمنطقة المدينة المنورة", "العسل"], ["إنشاء محطة تربية ملكات النحل وإنتاج الطرود بمنطقة حائل", "العسل"], ["إنشاء محطة تربية ملكات النحل وإنتاج الطرود بمنطقة تبوك", "العسل"], ["إنشاء محطة تربية ملكات النحل وإنتاج الطرود بمنطقة الطائف", "العسل"], ["إنشاء محطة تربية ملكات النحل وإنتاج الطرود بمنطقة نجران", "العسل"], ["تقديم خدمات الفحص وتشخيص أمراض وآفات النحل في العيادات المتنقلة", "العسل"], ["توريد (3) مختبرات متنقلة مع التجهيزات لفحص وتشخيص أمراض وآفات النحل في المحاجر", "العسل"], ["توريد (4) عيادات متنقلة مع التجهيزات لفحص وتشخيص أمراض وآفات النحل (مرحلة 2)", "العسل"], ["توريد أدوات النحالة الحديثة لنشر التقنيات الحديثة لدى النحالين", "العسل"], ["تقديم خدمات لتنفيذ برنامج المحافظة على سلالة نحل العسل المحلية", "العسل"], ["أعمال إنشائية في محطة ملكات النحل ببلجرشي", "العسل"], ["تقديم الخدمات لاستكمال مشاريع قطاع العسل", "العسل"], ["إنشاء وتجهيز مصنع إعداد وتجهيز البن بمنطقة الباحة", "البن العربي"], ["إنشاء وتجهيز مصنع إعداد وتجهيز البن بمنطقة جازان (الداير)", "البن العربي"], ["إنشاء مشاتل نموذجية للبن في مناطق جازان وعسير والباحة", "البن العربي"], ["إنشاء وتجهيز مصنع إعداد وتجهيز البن بمنطقة عسير", "البن العربي"], ["تنفيذ وتجهيز مزارع بديلة نموذجية في عدد من المواقع بمنطقة جازان", "البن العربي"], ["تقديم الخدمات لاستكمال مشاريع قطاع البن", "البن العربي"], ["توريد وتركيب محركات لقوارب الصيد", "الأسماك"], ["توريد أجهزة استغاثة بالأقمار الصناعية EPIRB لقوارب الصيد الصغيرة للسعوديين", "الأسماك"], ["إنشاء وتجهيز مزادات الأسماك بالقطيف", "الأسماك"], ["تنفيذ القوافل الإرشادية في مجال الثروة الحيوانية والسمكية في مناطق المملكة", "الأسماك"], ["إنشاء وتجهيز مزادات الأسماك بالرايس", "الأسماك"], ["إنشاء وتجهيز مزاد الأسماك بأملج", "الأسماك"], ["إنشاء وتجهيز مزادات الأسماك بالقنفذة", "الأسماك"], ["إنشاء وتجهيز مزاد الأسماك بخور فرسان", "الأسماك"], ["إنشاء وتجهيز مركز صيانة القوارب بخور فرسان", "الأسماك"], ["إنشاء وتجهيز مركز صيانة القوارب بالقطيف (المضايا)", "الأسماك"], ["إنشاء وتجهيز مركز صيانة القوارب بالقنفذة", "الأسماك"], ["إنشاء وتجهيز مركز صيانة القوارب بأملج", "الأسماك"], ["إنشاء وتجهيز مركز صيانة القوارب بالرايس", "الأسماك"], ["تأسيس و تطوير منصة الكترونية لدعم صيادي الأسماك", "الأسماك"], ["تقديم الخدمات لاستكمال مشاريع قطاع الأسماك", "الأسماك"]];
+
+function normalizeProjectName(s){
+  if(!s) return '';
+  return String(s)
+    .replace(/[\u0640]/g,'')                 // remove tatweel
+    .replace(/[إأآا]/g,'ا')                   // unify alef forms
+    .replace(/ى/g,'ي')
+    .replace(/ة/g,'ه')
+    .replace(/[\u064B-\u0652]/g,'')           // remove diacritics
+    .replace(/[.,،؛:؟!"'()\-–—]/g,' ')        // strip punctuation
+    .replace(/\s+/g,' ')
+    .trim()
+    .toLowerCase();
+}
+
+const PROJECT_SECTOR_MAP = {};
+PROJECT_SECTOR_LIST.forEach(([proj, sector])=>{
+  PROJECT_SECTOR_MAP[normalizeProjectName(proj)] = sector;
+});
+const PROJECT_SECTOR_KEYS = Object.keys(PROJECT_SECTOR_MAP);
+
+function lookupSector(projectName){
+  const norm = normalizeProjectName(projectName);
+  if(!norm) return 'غير مصنف';
+  if(PROJECT_SECTOR_MAP[norm]) return PROJECT_SECTOR_MAP[norm];
+  // fallback: partial containment match
+  for(const key of PROJECT_SECTOR_KEYS){
+    if(key.length > 8 && (norm.includes(key) || key.includes(norm))){
+      return PROJECT_SECTOR_MAP[key];
+    }
+  }
+  return 'غير مصنف';
+}
+
+function setLoadbar(pct){
+  document.getElementById('loadbar').style.width = pct + '%';
+}
+
+function showError(message){
+  document.getElementById('errorBox').style.display = 'block';
+  document.getElementById('errorBox').textContent =
+    'تعذر تحديث البيانات: ' + message + '. تأكد أن الشيت لا يزال مشاركًا بخيار "أي شخص لديه الرابط"، ثم اضغط "تحديث الآن".';
+  document.getElementById('lastUpdated').textContent = 'فشل آخر تحديث';
+  setLoadbar(0);
+}
+
+function loadData(manual){
+  const btn = document.getElementById('refreshBtn');
+  const icon = document.getElementById('refreshIcon');
+  btn.disabled = true;
+  icon.classList.add('spin');
+  setLoadbar(20);
+  document.getElementById('errorBox').style.display = 'none';
+
+  const cbName = 'gvizCb_' + Date.now();
+  let settled = false;
+
+  const cleanup = (scriptEl) => {
+    settled = true;
+    delete window[cbName];
+    if(scriptEl && scriptEl.parentNode) scriptEl.parentNode.removeChild(scriptEl);
+    btn.disabled = false;
+    icon.classList.remove('spin');
+  };
+
+  window[cbName] = function(json){
+    setLoadbar(70);
+    try{
+      if(json.status === 'error'){
+        const msg = (json.errors && json.errors[0] && json.errors[0].detailed_message) || 'الملف غير متاح للقراءة العامة';
+        throw new Error(msg);
+      }
+      const table = json.table;
+      const header = table.cols.map(c => c.label || c.id || '');
+      const rows = [header].concat(table.rows.map(r =>
+        header.map((_, i) => {
+          const cell = r.c[i];
+          if(!cell) return '';
+          if(cell.f !== undefined && cell.f !== null) return String(cell.f);
+          if(cell.v === null || cell.v === undefined) return '';
+          return String(cell.v);
+        })
+      ));
+      if(rows.length < 2) throw new Error('الملف لا يحتوي على بيانات');
+      processRows(rows);
+      setLoadbar(100);
+      document.getElementById('lastUpdated').textContent =
+        'آخر تحديث ' + new Date().toLocaleTimeString('ar-SA', {hour:'2-digit', minute:'2-digit'});
+      document.getElementById('sidebarDate').textContent =
+        new Date().toLocaleDateString('ar-SA', {year:'numeric', month:'2-digit', day:'2-digit'});
+      setTimeout(()=>setLoadbar(0), 700);
+    }catch(err){
+      showError(err.message);
+    }finally{
+      cleanup(script);
+    }
+  };
+
+  const script = document.createElement('script');
+  script.src = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?gid=" + GID +
+               "&tqx=responseHandler:" + cbName + "&_=" + Date.now();
+  script.onerror = () => {
+    if(settled) return;
+    showError('تعذر تحميل ملف البيانات (تحقق من صلاحية المشاركة أو الاتصال بالإنترنت)');
+    cleanup(script);
+  };
+  document.body.appendChild(script);
+
+  setTimeout(() => {
+    if(!settled){
+      showError('انتهت مهلة الانتظار أثناء تحميل البيانات');
+      cleanup(script);
+    }
+  }, 12000);
+}
+
+function processRows(data){
+  const header = data[0];
+  const idx = {
+    num: header.indexOf('#'),
+    project: header.indexOf('اسم المشروع'),
+    type: header.indexOf('تصنيف الخطاب'),
+    subject: header.indexOf('موضوع الخطاب'),
+    entityType: header.indexOf('تصنيف الجهة'),
+    entityName: header.indexOf('اسم الجهة'),
+    date: header.indexOf('تاريخ الخطاب'),
+    follow: header.indexOf('يتطلب متابعة'),
+    owner: header.indexOf('مسئول المتابعة'),
+    refNo: header.indexOf('صورة للخطاب'),
+  };
+
+  let lastProject = '';
+  const rows = [];
+  for(let i=1;i<data.length;i++){
+    const r = data[i];
+    if(!r || r.length < 2) continue;
+    const numVal = (r[idx.num] || '').trim();
+    if(!numVal) continue;
+
+    let project = (r[idx.project] || '').trim();
+    if(project) lastProject = project; else project = lastProject;
+
+    const entityType = (r[idx.entityType] || '').trim();
+    const entityName = (r[idx.entityName] || '').trim();
+    const entity = entityName || entityType || 'غير محدد';
+
+    rows.push({
+      num: numVal,
+      project: project || 'غير محدد',
+      sector: lookupSector(project),
+      type: (r[idx.type] || '').trim() || 'غير مصنف',
+      subject: (r[idx.subject] || '').trim(),
+      entityType: entityType || 'غير مصنف',
+      entity: entity,
+      date: (r[idx.date] || '').trim(),
+      follow: (r[idx.follow] || '').trim(),
+      owner: (r[idx.owner] || '').trim(),
+      refNo: (r[idx.refNo] || '').trim(),
+    });
+  }
+  rawRows = rows;
+  buildKPIs(rows);
+  buildCharts(rows);
+  buildFilterOptions(rows);
+  applyFilters();
+}
+
+function parseDate(str){
+  if(!str) return null;
+  const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(!m) return null;
+  const month = parseInt(m[1],10), day = parseInt(m[2],10), year = parseInt(m[3],10);
+  if(month<1||month>12||day<1||day>31) return null;
+  return new Date(year, month-1, day);
+}
+
+function buildKPIs(rows){
+  document.getElementById('kpiTotal').textContent = rows.length.toLocaleString('ar-SA');
+  const projects = new Set(rows.map(r=>r.project).filter(p=>p && p!=='غير محدد' && p!=='أخرى'));
+  document.getElementById('kpiProjects').textContent = projects.size.toLocaleString('ar-SA');
+
+  const follow = rows.filter(r=>r.follow==='نعم');
+  document.getElementById('kpiFollow').textContent = follow.length.toLocaleString('ar-SA');
+  document.getElementById('kpiFollowSub').textContent =
+    rows.length ? ((follow.length/rows.length*100).toFixed(0) + '٪ من الإجمالي') : '';
+
+  const now = new Date();
+  const thisMonth = rows.filter(r=>{
+    const d = parseDate(r.date);
+    return d && d.getMonth()===now.getMonth() && d.getFullYear()===now.getFullYear();
+  });
+  document.getElementById('kpiMonth').textContent = thisMonth.length.toLocaleString('ar-SA');
+  document.getElementById('kpiMonthSub').textContent = 'خطابًا في ' + now.toLocaleDateString('ar-SA', {month:'long', year:'numeric'});
+  document.getElementById('kpiTotalSub').textContent = 'سجلًا في قاعدة البيانات';
+}
+
+function topCounts(rows, key, limit){
+  const counts = {};
+  rows.forEach(r=>{
+    const k = r[key] || 'غير مصنف';
+    counts[k] = (counts[k]||0) + 1;
+  });
+  return Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0, limit);
+}
+
+function buildCharts(rows){
+  const typeData = topCounts(rows, 'type', 10);
+  const entityData = topCounts(rows, 'entityType', 7);
+
+  const monthCounts = {};
+  rows.forEach(r=>{
+    const d = parseDate(r.date);
+    if(!d) return;
+    const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+    monthCounts[key] = (monthCounts[key]||0) + 1;
+  });
+  const months = Object.keys(monthCounts).sort();
+  const monthLabels = months.map(m=>{
+    const [y,mo] = m.split('-');
+    return new Date(y, mo-1, 1).toLocaleDateString('ar-SA', {month:'short', year:'2-digit'});
+  });
+
+  const fontFamily = "'IBM Plex Sans Arabic', sans-serif";
+  Chart.defaults.font.family = fontFamily;
+  Chart.defaults.color = '#5B6650';
+
+  if(typeChart) typeChart.destroy();
+  typeChart = new Chart(document.getElementById('typeChart'), {
+    type:'bar',
+    data:{
+      labels: typeData.map(d=>d[0]),
+      datasets:[{ data: typeData.map(d=>d[1]), backgroundColor: '#3D5A4A', borderRadius:6, maxBarThickness:26 }]
+    },
+    options:{
+      indexAxis:'y',
+      plugins:{legend:{display:false}},
+      scales:{ x:{beginAtZero:true, grid:{color:'#EDEADB'}}, y:{grid:{display:false}} },
+      responsive:true, maintainAspectRatio:false
+    }
+  });
+
+  if(entityChart) entityChart.destroy();
+  entityChart = new Chart(document.getElementById('entityChart'), {
+    type:'doughnut',
+    data:{
+      labels: entityData.map(d=>d[0]),
+      datasets:[{ data: entityData.map(d=>d[1]), backgroundColor: COLORS, borderColor:'#fff', borderWidth:2 }]
+    },
+    options:{
+      plugins:{legend:{position:'bottom', labels:{boxWidth:10, font:{size:11}}}},
+      responsive:true, maintainAspectRatio:false, cutout:'62%'
+    }
+  });
+
+  let sectorChart_;
+  if(sectorChart) sectorChart.destroy();
+  const sectorData = topCounts(rows, 'sector', 10);
+  sectorChart = new Chart(document.getElementById('sectorChart'), {
+    type:'bar',
+    data:{
+      labels: sectorData.map(d=>d[0]),
+      datasets:[{ data: sectorData.map(d=>d[1]), backgroundColor: COLORS, borderRadius:6, maxBarThickness:30 }]
+    },
+    options:{
+      plugins:{legend:{display:false}},
+      scales:{ x:{grid:{display:false}}, y:{beginAtZero:true, grid:{color:'#EDEADB'}} },
+      responsive:true, maintainAspectRatio:false
+    }
+  });
+
+  if(timeChart) timeChart.destroy();
+  timeChart = new Chart(document.getElementById('timeChart'), {
+    type:'line',
+    data:{
+      labels: monthLabels,
+      datasets:[{
+        data: months.map(m=>monthCounts[m]),
+        borderColor:'#B89968', backgroundColor:'rgba(184,153,104,0.15)',
+        fill:true, tension:.35, pointRadius:2
+      }]
+    },
+    options:{
+      plugins:{legend:{display:false}},
+      scales:{ x:{grid:{display:false}}, y:{beginAtZero:true, grid:{color:'#EDEADB'}} },
+      responsive:true, maintainAspectRatio:false
+    }
+  });
+}
+
+function buildFilterOptions(rows){
+  const select = document.getElementById('typeFilter');
+  const current = select.value;
+  const types = [...new Set(rows.map(r=>r.type))].sort();
+  select.innerHTML = '<option value="">كل الأنواع</option>' +
+    types.map(t=>`<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+  select.value = current;
+
+  const sectorSelect = document.getElementById('sectorFilter');
+  const currentSector = sectorSelect.value;
+  const sectors = [...new Set(rows.map(r=>r.sector))].sort();
+  sectorSelect.innerHTML = '<option value="">كل القطاعات</option>' +
+    sectors.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+  sectorSelect.value = currentSector;
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function applyFilters(){
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  const typeF = document.getElementById('typeFilter').value;
+  const sectorF = document.getElementById('sectorFilter').value;
+  const followF = document.getElementById('followFilter').value;
+
+  filteredRows = rawRows.filter(r=>{
+    if(typeF && r.type !== typeF) return false;
+    if(sectorF && r.sector !== sectorF) return false;
+    if(followF && r.follow !== followF) return false;
+    if(q){
+      const hay = (r.project + ' ' + r.subject + ' ' + r.entity + ' ' + r.type).toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  page = 1;
+  renderTable();
+}
+
+function renderTable(){
+  const start = (page-1) * PAGE_SIZE;
+  const pageRows = filteredRows.slice(start, start + PAGE_SIZE);
+  const body = document.getElementById('tableBody');
+
+  if(pageRows.length === 0){
+    body.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:30px; color:#5B6650;">لا توجد نتائج مطابقة</td></tr>`;
+  }else{
+    body.innerHTML = pageRows.map(r=>`
+      <tr>
+        <td>${escapeHtml(r.num)}</td>
+        <td>${escapeHtml(r.project)}</td>
+        <td><span class="badge tag">${escapeHtml(r.sector)}</span></td>
+        <td><span class="badge tag">${escapeHtml(r.type)}</span></td>
+        <td>${escapeHtml(r.subject)}</td>
+        <td>${escapeHtml(r.entity)}</td>
+        <td>${escapeHtml(r.date)}</td>
+        <td>${r.follow==='نعم' ? '<span class="badge yes">نعم</span>' : r.follow==='لا' ? '<span class="badge no">لا</span>' : '—'}</td>
+        <td>${escapeHtml(r.owner) || '—'}</td>
+        <td>${escapeHtml(r.refNo) || '—'}</td>
+      </tr>`).join('');
+  }
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  document.getElementById('pageInfo').textContent = `صفحة ${page} من ${totalPages}`;
+  document.getElementById('resultCount').textContent = `${filteredRows.length.toLocaleString('ar-SA')} نتيجة`;
+  document.getElementById('prevBtn').disabled = page <= 1;
+  document.getElementById('nextBtn').disabled = page >= totalPages;
+}
+
+function changePage(delta){
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  page = Math.min(totalPages, Math.max(1, page + delta));
+  renderTable();
+}
+
+loadData(false);
+setInterval(()=>loadData(false), REFRESH_MS);
+
+document.querySelectorAll('.nav-item').forEach(el=>{
+  el.addEventListener('click', function(){
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
+</script>
+</body>
+</html>
